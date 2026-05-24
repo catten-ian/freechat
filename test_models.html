@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>模型分组测试</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #1a1a2e; color: #eee; }
+    .test { margin: 20px 0; }
+    button { background: #667eea; color: white; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; }
+    .result { margin-top: 10px; padding: 10px; background: #2d2d44; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1>模型分组测试</h1>
+  <div class="test">
+    <button onclick="checkModels()">检查模型分组</button>
+    <div id="result" class="result"></div>
+  </div>
+
+  <script type="module">
+    const MODELS = [
+      { id: 'MiniMax-M2.5', name: 'MiniMax M2.5', desc: '稳定快速', api: 'hizui', group: 'MiniMax' },
+      { id: 'MiniMax-M2.7', name: 'MiniMax M2.7', desc: '更强推理', api: 'hizui', group: 'MiniMax' },
+      { id: 'deepseek-ai/DeepSeek-V4-Flash', name: 'DeepSeek V4', desc: '硅基流动', api: 'siliconflow', group: 'DeepSeek' },
+      { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', desc: '无审查', api: 'venice', group: 'Venice' },
+      { id: 'gpt-5-5', name: 'GPT-5.5', desc: '无审查', api: 'venice', group: 'Venice' },
+      { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', desc: '无审查', api: 'venice', group: 'Venice' },
+    ];
+
+    const MODEL_GROUPS = [...new Set(MODELS.map(m => m.group))];
+
+    window.checkModels = function() {
+      const result = document.getElementById('result');
+      let html = '<h3>模型分组：</h3>';
+
+      MODEL_GROUPS.forEach(group => {
+        html += `<div style="margin: 10px 0; padding: 10px; background: #3d3d54; border-radius: 8px;">`;
+        html += `<div style="color: gold; font-weight: bold; margin-bottom: 8px;">${group}</div>`;
+
+        MODELS.filter(m => m.group === group).forEach(m => {
+          html += `<div style="padding: 8px; margin: 4px 0; background: #1a1a2e; border-radius: 4px;">`;
+          html += `<b>${m.name}</b> - <span style="color: #aaa;">${m.desc}</span>`;
+          html += `</div>`;
+        });
+
+        html += `</div>`;
+      });
+
+      result.innerHTML = html;
+    };
+  </script>
+</body>
+</html>

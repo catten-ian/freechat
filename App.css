@@ -208,30 +208,50 @@ header .controls {
   margin-top: 8px;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  min-width: 180px;
+  min-width: 200px;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
-.model-dropdown div {
+.model-group {
+  border-bottom: 1px solid #3d3d54;
+}
+
+.model-group:last-child {
+  border-bottom: none;
+}
+
+.group-title {
+  padding: 8px 16px;
+  background: rgba(102, 126, 234, 0.2);
+  color: #ffd700;
+  font-weight: bold;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.model-item {
   padding: 12px 16px;
   cursor: pointer;
   transition: background 0.2s;
 }
 
-.model-dropdown div:hover {
+.model-item:hover {
   background: rgba(102, 126, 234, 0.3);
 }
 
-.model-dropdown div.selected {
+.model-item.selected {
   background: rgba(102, 126, 234, 0.5);
 }
 
-.model-dropdown b {
+.model-item b {
   display: block;
   color: white;
   margin-bottom: 4px;
 }
 
-.model-dropdown span {
+.model-item span {
   font-size: 12px;
   color: #aaa;
 }

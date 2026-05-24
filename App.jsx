@@ -2,13 +2,15 @@ import { useState, useRef, useEffect } from 'react'
 import './App.css'
 
 const MODELS = [
-  { id: 'MiniMax-M2.5', name: 'MiniMax M2.5', desc: '稳定快速', api: 'hizui' },
-  { id: 'MiniMax-M2.7', name: 'MiniMax M2.7', desc: '更强推理', api: 'hizui' },
-  { id: 'deepseek-ai/DeepSeek-V4-Flash', name: 'DeepSeek V4', desc: '硅基流动', api: 'siliconflow' },
-  { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', desc: '无审查', api: 'venice' },
-  { id: 'gpt-5-5', name: 'GPT-5.5', desc: '无审查', api: 'venice' },
-  { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', desc: '无审查', api: 'venice' },
+  { id: 'MiniMax-M2.5', name: 'MiniMax M2.5', desc: '稳定快速', api: 'hizui', group: 'MiniMax' },
+  { id: 'MiniMax-M2.7', name: 'MiniMax M2.7', desc: '更强推理', api: 'hizui', group: 'MiniMax' },
+  { id: 'deepseek-ai/DeepSeek-V4-Flash', name: 'DeepSeek V4', desc: '硅基流动', api: 'siliconflow', group: 'DeepSeek' },
+  { id: 'claude-opus-4-7', name: 'Claude Opus 4.7', desc: '无审查', api: 'venice', group: 'Venice' },
+  { id: 'gpt-5-5', name: 'GPT-5.5', desc: '无审查', api: 'venice', group: 'Venice' },
+  { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', desc: '无审查', api: 'venice', group: 'Venice' },
 ]
+
+const MODEL_GROUPS = [...new Set(MODELS.map(m => m.group))]
 
 const GRADING_PROMPT = `你是一位专业的英语作文批改老师。请按照以下标准批改学生的英语作文：
 
@@ -349,9 +351,19 @@ function App() {
               </button>
               {showModels && (
                 <div className="model-dropdown">
-                  {MODELS.map(m => (
-                    <div key={m.id} className={model === m.id ? 'selected' : ''} onClick={() => { setModel(m.id); setShowModels(false) }}>
-                      <b>{m.name}</b><span>{m.desc}</span>
+                  {MODEL_GROUPS.map(group => (
+                    <div key={group} className="model-group">
+                      <div className="group-title">{group}</div>
+                      {MODELS.filter(m => m.group === group).map(m => (
+                        <div 
+                          key={m.id} 
+                          className={`model-item ${model === m.id ? 'selected' : ''}`} 
+                          onClick={() => { setModel(m.id); setShowModels(false) }}
+                        >
+                          <b>{m.name}</b>
+                          <span>{m.desc}</span>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>

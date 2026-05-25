@@ -14,58 +14,9 @@ app.use((req, res, next) => {
   next()
 })
 
-// 对话管理数据存储（内存存储，生产环境应使用数据库）
-let conversations = []
-let conversationIdCounter = 1
-
-// 获取所有对话
-app.get('/api/conversations', (req, res) => {
-  res.json(conversations.sort((a, b) => b.updatedAt - a.updatedAt))
-})
-
-// 创建新对话
-app.post('/api/conversations', (req, res) => {
-  const { title, messages = [] } = req.body
-  const conversation = {
-    id: conversationIdCounter++,
-    title: title || `新对话 ${conversationIdCounter}`,
-    messages,
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  }
-  conversations.push(conversation)
-  res.status(201).json(conversation)
-})
-
-// 更新对话
-app.put('/api/conversations/:id', (req, res) => {
-  const id = parseInt(req.params.id)
-  const { title, messages } = req.body
-  const conversation = conversations.find(c => c.id === id)
-  
-  if (!conversation) {
-    return res.status(404).json({ error: '对话不存在' })
-  }
-  
-  if (title !== undefined) conversation.title = title
-  if (messages !== undefined) conversation.messages = messages
-  conversation.updatedAt = Date.now()
-  
-  res.json(conversation)
-})
-
-// 删除对话
-app.delete('/api/conversations/:id', (req, res) => {
-  const id = parseInt(req.params.id)
-  const index = conversations.findIndex(c => c.id === id)
-  
-  if (index === -1) {
-    return res.status(404).json({ error: '对话不存在' })
-  }
-  
-  conversations.splice(index, 1)
-  res.status(204).send()
-})
+// 导入数据库 API
+import apiRoutes from './api.js'
+app.use('/api/db', apiRoutes)
 
 // API配置
 const APIs = {
@@ -178,13 +129,17 @@ app.post('/api/v1/images/generations', async (req, res) => {
 const __dirname = dirname(fileURLToPath(import.meta.url))
 app.use(express.static(join(__dirname, 'dist')))
 
-app.get('*', (req, res) => {
+// SPA fallback - 所有非 API 路由返回 index.html
+app.use((req, res, next) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(join(__dirname, 'dist', 'index.html'))
+  } else {
+    next()
   }
 })
 
 const PORT = 3001
 createServer(app).listen(PORT, () => {
   console.log('FreeChat running on port', PORT)
+  console.log('Database API available at /api/db')
 })

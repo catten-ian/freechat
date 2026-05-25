@@ -470,6 +470,7 @@ export default function App() {
       <Sidebar
         onSelectConversation={handleSelectConversation}
         currentConversationId={currentConversation?.id}
+        isOpen={showSidebar}
       />
       
       {/* 主内容区 */}
@@ -481,6 +482,9 @@ export default function App() {
             <span className="title-text">小喵AI</span>
           </h1>
           <div className="controls">
+            <button className="sidebar-toggle" onClick={() => setShowSidebar(!showSidebar)}>
+              ☰
+            </button>
             <button className="model-button" onClick={() => setShowModels(!showModels)}>
               <span className="model-name">{currentModel?.name}</span>
               <span className="model-arrow">▼</span>

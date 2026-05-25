@@ -13,7 +13,7 @@ import {
   deleteTag
 } from '../utils/storage'
 
-export function Sidebar({ onSelectConversation, currentConversationId }) {
+export function Sidebar({ onSelectConversation, currentConversationId, isOpen = true }) {
   const [conversations, setConversations] = useState([])
   const [folders, setFolders] = useState([])
   const [tags, setTags] = useState([])
@@ -127,7 +127,7 @@ export function Sidebar({ onSelectConversation, currentConversationId }) {
   const displayConversations = query.trim() ? results : conversations.filter(c => !c.archived)
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
       <div className="sidebar-header">
         <button className="new-chat-btn" onClick={handleNewConversation}>
           ➕ 新建对话

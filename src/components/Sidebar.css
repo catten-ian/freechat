@@ -354,6 +354,18 @@
   .sidebar.open + .sidebar-overlay {
     display: block;
   }
+  
+  /* 移动端显示侧栏切换按钮 */
+  .sidebar-toggle {
+    display: flex;
+  }
+}
+
+/* 桌面端隐藏切换按钮 */
+@media screen and (min-width: 769px) {
+  .sidebar-toggle {
+    display: none;
+  }
 }
 
 /* 滚动条样式 */

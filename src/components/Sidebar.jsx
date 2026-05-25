@@ -13,7 +13,7 @@ import {
   deleteTag
 } from '../utils/storage'
 
-export function Sidebar({ onSelectConversation, currentConversationId, isOpen = true }) {
+export function Sidebar({ onSelectConversation, currentConversationId, isOpen = true, onClose }) {
   const [conversations, setConversations] = useState([])
   const [folders, setFolders] = useState([])
   const [tags, setTags] = useState([])
@@ -128,6 +128,12 @@ export function Sidebar({ onSelectConversation, currentConversationId, isOpen = 
 
   return (
     <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+      {/* 移动端关闭按钮 */}
+      {onClose && (
+        <button className="sidebar-close-btn" onClick={onClose}>
+          ✕
+        </button>
+      )}
       <div className="sidebar-header">
         <button className="new-chat-btn" onClick={handleNewConversation}>
           ➕ 新建对话

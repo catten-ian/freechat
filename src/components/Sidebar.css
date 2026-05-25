@@ -13,12 +13,43 @@
   flex-direction: column;
   overflow: hidden;
   transition: transform 0.3s ease, width 0.3s ease;
+  position: relative;
 }
 
 .sidebar.collapsed {
   width: 0;
   min-width: 0;
   transform: translateX(-280px);
+}
+
+/* 关闭按钮（移动端） */
+.sidebar-close-btn {
+  display: none;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+}
+
+.sidebar-close-btn:hover {
+  background: var(--accent-danger);
+}
+
+@media screen and (max-width: 768px) {
+  .sidebar-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 }
 
 /* 侧栏头部 */

@@ -100,8 +100,13 @@ export default function App() {
   const refImageRef = useRef(null)
   const thinkingStateRef = useRef({ inThinking: false, buffer: "" })
   
-  // 侧栏相关状态
-  const [showSidebar, setShowSidebar] = useState(true)
+  // 侧栏相关状态 - 移动端默认收起，桌面端默认显示
+  const [showSidebar, setShowSidebar] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 769
+    }
+    return true
+  })
   const [currentConversation, setCurrentConversation] = useState(null)
   const [conversations, setConversations] = useState([])
 
@@ -114,6 +119,15 @@ export default function App() {
     // 加载对话列表
     const savedConversations = getConversations()
     setConversations(savedConversations)
+    
+    // 监听窗口大小变化
+    const handleResize = () => {
+      if (window.innerWidth >= 769) {
+        setShowSidebar(true) // 桌面端自动展开
+      }
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   useEffect(() => {
@@ -471,7 +485,13 @@ export default function App() {
         onSelectConversation={handleSelectConversation}
         currentConversationId={currentConversation?.id}
         isOpen={showSidebar}
+        onClose={() => setShowSidebar(false)}
       />
+      
+      {/* 移动端遮罩层 */}
+      {showSidebar && typeof window !== 'undefined' && window.innerWidth < 769 && (
+        <div className="sidebar-overlay" onClick={() => setShowSidebar(false)} />
+      )}
       
       {/* 主内容区 */}
       <div className="main-container">

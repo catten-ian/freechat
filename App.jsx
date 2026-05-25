@@ -477,18 +477,18 @@ export default function App() {
               </button>
             ))}
             <div className="model-group-label">付费模型</div>
-            <div className="model-group-label">非审查模型</div>
-            {models.filter(m => m.api === 'venice').map(m => (
+            {models.filter(m => m.api === 'v3cm').map(m => (
               <button
                 key={m.id}
                 className={"model-option " + (m.id === model ? "active" : "")}
                 onClick={() => { setModel(m.id); setShowModels(false) }}
               >
-                <span className="model-name">{m.name}</span>
-                <span className="model-desc">{m.desc}</span>
+                <span className="option-name">{m.name}</span>
+                <span className="option-desc">{m.desc}</span>
               </button>
             ))}
-            {models.filter(m => m.api !== 'openrouter').map(m => (
+            <div className="model-group-label">非审查模型</div>
+            {models.filter(m => m.api === 'venice').map(m => (
               <button
                 key={m.id}
                 className={"model-option " + (m.id === model ? "active" : "")}

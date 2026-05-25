@@ -4,6 +4,9 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import "./App.css"
+import { Sidebar } from './src/components/Sidebar'
+import './src/components/Sidebar.css'
+import { getConversations, createConversation, updateConversation, deleteConversation } from './src/utils/storage'
 
 const models = [
   { id: "meta-llama/llama-3.2-3b-instruct:free", name: "Llama 3.2 3B", desc: "轻量快速", api: "openrouter", vision: false, thinking: false },
@@ -96,24 +99,63 @@ export default function App() {
   const fileInputRef = useRef(null)
   const refImageRef = useRef(null)
   const thinkingStateRef = useRef({ inThinking: false, buffer: "" })
+  
+  // 侧栏相关状态
+  const [showSidebar, setShowSidebar] = useState(true)
+  const [currentConversation, setCurrentConversation] = useState(null)
+  const [conversations, setConversations] = useState([])
 
   useEffect(() => {
     const saved = getCookie('chat_history')
     if (saved && Array.isArray(saved)) {
       setMessages(saved)
     }
+    
+    // 加载对话列表
+    const savedConversations = getConversations()
+    setConversations(savedConversations)
   }, [])
 
   useEffect(() => {
     if (messages.length > 0) {
       const toSave = messages.slice(-50)
       setCookie('chat_history', toSave, 7)
+      
+      // 保存到当前对话
+      if (currentConversation) {
+        updateConversation(currentConversation.id, { messages: toSave })
+      }
     }
-  }, [messages])
+  }, [messages, currentConversation])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
+  
+  // 选择对话
+  const handleSelectConversation = (conversation) => {
+    setCurrentConversation(conversation)
+    setMessages(conversation.messages || [])
+  }
+  
+  // 新建对话
+  const handleNewConversation = () => {
+    const conversation = createConversation('新对话', [])
+    setConversations([conversation, ...conversations])
+    setCurrentConversation(conversation)
+    setMessages([])
+    setCookie('chat_history', [], 7)
+  }
+  
+  // 删除对话
+  const handleDeleteConversation = (id) => {
+    deleteConversation(id)
+    setConversations(conversations.filter(c => c.id !== id))
+    if (currentConversation && currentConversation.id === id) {
+      setCurrentConversation(null)
+      setMessages([])
+    }
+  }
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0]
@@ -424,7 +466,15 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="header">
+      {/* 侧栏 */}
+      <Sidebar
+        onSelectConversation={handleSelectConversation}
+        currentConversationId={currentConversation?.id}
+      />
+      
+      {/* 主内容区 */}
+      <div className="main-container">
+        <header className="header">
         <div className="header-content">
           <h1 className="title">
             <span className="title-icon">🐱</span>
@@ -705,6 +755,7 @@ export default function App() {
           </button>
         </div>
       </footer>
+      </div>
     </div>
   )
 }

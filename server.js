@@ -2,6 +2,7 @@ import express from 'express'
 import { createServer } from 'http'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { createWSServer } from './ws_server.js'
 
 const app = express()
 app.use(express.json({ limit: '10mb' }))
@@ -139,7 +140,13 @@ app.use((req, res, next) => {
 })
 
 const PORT = 3001
-createServer(app).listen(PORT, () => {
+const server = createServer(app)
+
+// 创建 WebSocket 服务器
+createWSServer(server)
+
+server.listen(PORT, () => {
   console.log('FreeChat running on port', PORT)
   console.log('Database API available at /api/db')
+  console.log('WebSocket server running')
 })

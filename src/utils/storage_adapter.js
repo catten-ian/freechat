@@ -2,6 +2,9 @@
 
 import { getWSClient, MESSAGE_TYPES } from './ws_client.js'
 
+// API base path：生产环境下位于 /ai 子路径，本地开发时为根路径
+export const API_BASE = window.location.pathname.startsWith('/ai/') ? '/ai' : ''
+
 // 存储模式
 const STORAGE_MODE = {
   LOCAL: 'local',    // localStorage（离线模式）

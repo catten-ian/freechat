@@ -4,7 +4,7 @@
 // - 开关关闭时：完全使用 localStorage（行为不变）
 // - 开关打开时：localStorage + 云端双写，保证向后兼容
 
-import { getStorageAdapter } from './storage_adapter'
+import { getStorageAdapter, API_BASE } from './storage_adapter'
 
 const SYNC_ENABLED_KEY = 'freechat_cloud_sync_enabled'
 const SYNC_ID_MAP_KEY = 'freechat_cloud_id_map' // 本地 id -> 云端 id 映射
@@ -137,7 +137,7 @@ export function syncMessages(localId, messages) {
   newMessages.forEach((msg, idx) => {
     if (!msg.role || !msg.content) return
     
-    fetch(`/api/db/conversations/${cloudId}/messages`, {
+    fetch(`${API_BASE}/api/db/conversations/${cloudId}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -165,7 +165,7 @@ export function fetchCloudConversations() {
     
     if (!adapter.isOnline()) {
       // 用 REST API 兜底
-      fetch('/api/db/conversations')
+      fetch(`${API_BASE}/api/db/conversations`)
         .then(r => r.json())
         .then(data => resolve(data.conversations || []))
         .catch(reject)
@@ -180,7 +180,7 @@ export function fetchCloudConversations() {
 
 // 获取云端消息（用于恢复某个对话）
 export function fetchCloudMessages(cloudId) {
-  return fetch(`/api/db/conversations/${cloudId}/messages`)
+  return fetch(`${API_BASE}/api/db/conversations/${cloudId}/messages`)
     .then(r => r.json())
     .then(data => data.messages || [])
 }
@@ -205,7 +205,7 @@ export async function pushAllToCloud(localConversations) {
       }
       
       // 1. 创建云端对话（用 REST 同步，便于按序）
-      const createRes = await fetch('/api/db/conversations', {
+      const createRes = await fetch(`${API_BASE}/api/db/conversations`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -229,7 +229,7 @@ export async function pushAllToCloud(localConversations) {
       for (const msg of messages) {
         if (!msg.role || !msg.content) continue
         
-        await fetch(`/api/db/conversations/${cloudId}/messages`, {
+        await fetch(`${API_BASE}/api/db/conversations/${cloudId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -255,8 +255,8 @@ export async function pushAllToCloud(localConversations) {
 // 跨设备恢复：从云端拉取一个对话到本地格式
 export async function pullCloudConversation(cloudId) {
   const [convRes, msgsRes] = await Promise.all([
-    fetch(`/api/db/conversations`).then(r => r.json()),
-    fetch(`/api/db/conversations/${cloudId}/messages`).then(r => r.json())
+    fetch(`${API_BASE}/api/db/conversations`).then(r => r.json()),
+    fetch(`${API_BASE}/api/db/conversations/${cloudId}/messages`).then(r => r.json())
   ])
   
   const cloudConv = (convRes.conversations || []).find(c => c.id === cloudId)

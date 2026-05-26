@@ -1,152 +1,257 @@
-import express from 'express'
-import { createServer } from 'http'
-import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
-import { createWSServer } from './ws_server.js'
+import express from "express"
+import { createServer } from "http"
+import { WebSocketServer } from "ws"
+import { join, dirname } from "path"
+import { fileURLToPath } from "url"
+import apiRoutes from "./api.js"
 
 const app = express()
-app.use(express.json({ limit: '10mb' }))
+app.use(express.json({ limit: "50mb" }))
 
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*')
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  if (req.method === 'OPTIONS') return res.sendStatus(200)
+  res.header("Access-Control-Allow-Origin", "*")
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+  if (req.method === "OPTIONS") return res.sendStatus(200)
   next()
 })
 
-// 导入数据库 API
-import apiRoutes from './api.js'
-app.use('/api/db', apiRoutes)
+// 云端同步数据库 API（SQLite，不影响原有聊天）
+app.use("/api/db", apiRoutes)
 
-// API配置
 const APIs = {
-  hizui: {
-    url: 'https://newapi.hizui.cn/v1/chat/completions',
-    key: 'sk-gsM3EdexRXhdqhWxltk9mRdK58sD4HZI4IPlNlCPkafy9pPh'
+  openrouter: {
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    key: process.env.OPENROUTER_KEY || ""
   },
-  siliconflow: {
-    url: 'https://api.siliconflow.cn/v1/chat/completions',
-    key: 'sk-vplbeiffbvyoajpnzzkhkdxfccogdsypmmjtqzuhjhzdqezk'
+  v3cm: {
+    url: "https://api.v3.cm/v1/chat/completions",
+    key: process.env.V3CM_KEY || ""
   },
-  venice: {
-    url: 'https://api.venice.ai/api/v1/chat/completions',
-    key: 'VENICE_ADMIN_KEY_BGijBQCETUp1Xs_kq6ZgQdCYa2BH8Fn1G6811W4xpD'
-  },
-  venice_image: {
-    url: 'https://api.venice.ai/api/v1/images/generations',
-    key: 'VENICE_ADMIN_KEY_BGijBQCETUp1Xs_kq6ZgQdCYa2BH8Fn1G6811W4xpD'
-  }
 }
 
-// 模型到API的映射
 const MODEL_API_MAP = {
-  'MiniMax-M2.5': 'hizui',
-  'MiniMax-M2.7': 'hizui',
-  'deepseek-ai/DeepSeek-V4-Flash': 'siliconflow',
-  'claude-opus-4-7': 'venice',
-  'gpt-5-5': 'venice',
-  'deepseek-v4-pro': 'venice',
+  "meta-llama/llama-3.2-3b-instruct:free": "openrouter",
+  "meta-llama/llama-3.3-70b-instruct:free": "openrouter",
+  "google/gemma-4-26b-a4b-it:free": "openrouter",
+  "google/gemma-4-31b-it:free": "openrouter",
+  "nvidia/nemotron-nano-12b-v2-vl:free": "openrouter",
+  "arcee-ai/trinity-large-thinking:free": "openrouter",
+  "liquid/lfm-2.5-1.2b-thinking:free": "openrouter",
+  "qwen/qwen3-next-80b-a3b-instruct:free": "openrouter",
+  "deepseek/deepseek-v4-flash:free": "openrouter",
+  "gpt-4o": "v3cm",
+  "claude-sonnet-4-6": "v3cm",
 }
 
-// 聊天 API
-app.post('/api/v1/chat/completions', async (req, res) => {
-  const body = req.body
-  const model = body.model || 'MiniMax-M2.5'
-  const apiName = MODEL_API_MAP[model] || 'hizui'
-  const api = APIs[apiName]
-  
-  // 处理思考模式
-  const thinking = body.thinking || false
-  
-  // 构建请求体
-  const requestBody = { ...body }
-  
-  // 对于支持思考模式的模型，添加相应参数
-  if (thinking) {
-    if (apiName === 'siliconflow') {
-      // SiliconFlow: 使用 thinking 参数
-      requestBody.thinking = true
-    } else if (apiName === 'venice') {
-      // Venice: reasoning 需要是一个对象
-      requestBody.reasoning = { enabled: true }
-    }
-  }
-  
-  // 移除前端的 thinking 参数，避免传递给不支持的后端
-  delete requestBody.thinking
-  
-  console.log('Request:', model, 'thinking:', thinking, 'api:', apiName)
-  
-  try {
-    const apiRes = await fetch(api.url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + api.key,
-      },
-      body: JSON.stringify(requestBody),
-    })
-    
-    const data = await apiRes.json()
-    console.log('Response:', data.choices?.[0]?.message?.content?.slice(0, 100))
-    res.status(200).json(data)
-  } catch (e) {
-    console.error('Error:', e.message)
-    res.status(500).json({ error: { message: e.message } })
-  }
-})
+const NATIVE_THINKING_MODELS = [
+  "arcee-ai/trinity-large-thinking:free",
+  "liquid/lfm-2.5-1.2b-thinking:free",
+]
 
-// 图像生成 API（Venice 无审查）
-app.post('/api/v1/images/generations', async (req, res) => {
-  const body = req.body
-  const api = APIs.venice_image
-  
-  console.log('Image generation request:', body.prompt)
-  
+const THINKING_PROMPT = `请先在<thinking>标签中详细思考和分析问题，然后再给出最终答案。
+<thinking>
+[你的思考过程]
+</thinking>
+[你的最终答案]
+`
+
+// 图片生成 API
+app.post("/api/image", async (req, res) => {
   try {
-    const apiRes = await fetch(api.url, {
-      method: 'POST',
+    const { prompt, model, size = "1024x1024", n = 1, referenceImage } = req.body
+    
+    if (!prompt) {
+      return res.status(400).json({ error: "缺少 prompt 参数" })
+    }
+    
+    // Nano Banana 系列 - 使用 v1beta API
+    if (model.startsWith("nano-banana")) {
+      const parts = [{ text: prompt }]
+      
+      if (referenceImage) {
+        const base64Data = referenceImage.split(',')[1] || referenceImage
+        const mimeType = referenceImage.includes('data:') 
+          ? referenceImage.match(/data:([^;]+)/)?.[1] || 'image/jpeg'
+          : 'image/jpeg'
+        
+        parts.push({
+          inlineData: { mimeType, data: base64Data }
+        })
+      }
+      
+      const imageRes = await fetch(`https://api.v3.cm/v1beta/models/${model}:predict`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + APIs.v3cm.key,
+        },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { n }
+        }),
+      })
+      
+      const data = await imageRes.json()
+      
+      if (data.error) {
+        return res.status(400).json({ error: data.error.message || "生成失败" })
+      }
+      
+      const images = []
+      if (data.candidates) {
+        for (const candidate of data.candidates) {
+          const part = candidate?.content?.parts?.find(p => p.inlineData)
+          if (part?.inlineData) {
+            images.push({
+              image: "data:" + part.inlineData.mimeType + ";base64," + part.inlineData.data
+            })
+          }
+        }
+      }
+      
+      if (images.length === 0) {
+        return res.status(400).json({ error: "未生成图片" })
+      }
+      
+      return res.json({ images })
+    }
+    
+    // DALL-E / GPT Image / Flux / Imagen 等 - 使用 v1/images/generations
+    const imageRes = await fetch("https://api.v3.cm/v1/images/generations", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + api.key,
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + APIs.v3cm.key,
       },
       body: JSON.stringify({
-        prompt: body.prompt,
-        model: body.model || 'flux',
-        size: body.size || '1024x1024',
+        model,
+        prompt,
+        n,
+        size,
       }),
     })
     
-    const data = await apiRes.json()
-    console.log('Image response:', data.data?.[0]?.url ? 'URL received' : 'Base64 received')
-    res.status(200).json(data)
+    const data = await imageRes.json()
+    
+    if (data.error) {
+      return res.status(400).json({ error: data.error.message || "生成失败" })
+    }
+    
+    const images = (data.data || []).map(item => ({
+      url: item.url,
+      image: item.b64_json ? "data:image/png;base64," + item.b64_json : null
+    }))
+    
+    res.json({ images })
   } catch (e) {
-    console.error('Image generation error:', e.message)
-    res.status(500).json({ error: { message: e.message } })
+    res.status(500).json({ error: e.message })
   }
+})
+
+// WebSocket 服务器
+const server = createServer(app)
+const wss = new WebSocketServer({ server, path: "/api/ws" })
+
+wss.on("connection", (ws) => {
+  ws.on("message", async (data) => {
+    try {
+      const { model, messages, showThinking } = JSON.parse(data.toString())
+      const apiName = MODEL_API_MAP[model] || "v3cm"
+      const api = APIs[apiName]
+      
+      let processedMessages = messages
+      
+      if (showThinking && !NATIVE_THINKING_MODELS.includes(model)) {
+        processedMessages = messages.map(msg => {
+          if (msg.role === "user") {
+            const content = typeof msg.content === "string" 
+              ? THINKING_PROMPT + msg.content 
+              : msg.content
+            return { ...msg, content }
+          }
+          return msg
+        })
+      }
+      
+      const requestBody = { model, messages: processedMessages, stream: true }
+      
+      if (NATIVE_THINKING_MODELS.includes(model)) {
+        requestBody.reasoning = { effort: "medium" }
+      }
+      
+      const headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + api.key,
+      }
+      
+      if (apiName === "openrouter") {
+        headers["HTTP-Referer"] = "https://www.catten.cyou/ai/"
+        headers["X-Title"] = "XiaoMiao AI"
+      }
+      
+      const apiRes = await fetch(api.url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+      })
+      
+      if (!apiRes.ok) {
+        const errorText = await apiRes.text()
+        ws.send(JSON.stringify({ type: "error", message: "API错误: " + apiRes.status + " " + errorText }))
+        ws.close()
+        return
+      }
+      
+      const reader = apiRes.body.getReader()
+      const decoder = new TextDecoder()
+      
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) {
+          ws.send(JSON.stringify({ type: "done" }))
+          break
+        }
+        
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split("\n")
+        
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6)
+            if (data === "[DONE]") continue
+            try {
+              const json = JSON.parse(data)
+              const delta = json.choices?.[0]?.delta
+              
+              if (delta?.reasoning) {
+                ws.send(JSON.stringify({ type: "thinking", content: delta.reasoning }))
+              }
+              
+              if (delta?.content) {
+                ws.send(JSON.stringify({ type: "content", content: delta.content }))
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    } catch (e) {
+      ws.send(JSON.stringify({ type: "error", message: e.message }))
+    }
+  })
 })
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-app.use(express.static(join(__dirname, 'dist')))
+app.use(express.static(join(__dirname, "dist")))
 
-// SPA fallback - 所有非 API 路由返回 index.html
+// SPA fallback - 免受 Express 5 路由通配符不兼容问题
 app.use((req, res, next) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(join(__dirname, 'dist', 'index.html'))
-  } else {
-    next()
-  }
+  if (req.method !== "GET") return next()
+  if (req.path.startsWith("/api")) return next()
+  res.sendFile(join(__dirname, "dist", "index.html"))
 })
 
 const PORT = 3001
-const server = createServer(app)
-
-// 创建 WebSocket 服务器
-createWSServer(server)
-
 server.listen(PORT, () => {
-  console.log('FreeChat running on port', PORT)
-  console.log('Database API available at /api/db')
-  console.log('WebSocket server running')
+  console.log("FreeChat running on port", PORT)
 })

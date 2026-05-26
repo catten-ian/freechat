@@ -17,7 +17,9 @@ import {
   syncDeleteConversation,
   syncMessages as cloudSyncMessages,
   fetchCloudConversations,
-  fetchCloudMessages
+  fetchCloudMessages,
+  pushAllToCloud,
+  pullCloudConversation
 } from './src/utils/cloudSync'
 
 const models = [
@@ -124,6 +126,9 @@ export default function App() {
   const [cloudSyncEnabled, setCloudSyncEnabled] = useState(() => cloudIsSyncEnabled())
   const [cloudOnline, setCloudOnline] = useState(false)
   const [showCloudPanel, setShowCloudPanel] = useState(false)
+  const [cloudBackups, setCloudBackups] = useState([])
+  const [cloudBusy, setCloudBusy] = useState(false)
+  const [cloudStatus, setCloudStatus] = useState('')
 
   // 初始化云端同步
   useEffect(() => {
@@ -633,33 +638,127 @@ export default function App() {
 
       {showCloudPanel && (
         <div className="modal-overlay" onClick={() => setShowCloudPanel(false)}>
-          <div className="image-gen-panel" onClick={(e) => e.stopPropagation()} style={{maxWidth: 520}}>
+          <div className="image-gen-panel" onClick={(e) => e.stopPropagation()} style={{maxWidth: 600, maxHeight: '85vh', overflowY: 'auto'}}>
             <div className="image-gen-header">
               <span>☁️ 云端备份管理</span>
               <button onClick={() => setShowCloudPanel(false)} className="close-panel">×</button>
             </div>
             <div style={{padding: '16px', color: '#e0e0e0', fontSize: 14, lineHeight: 1.7}}>
               <p>状态：{cloudOnline ? '🟢 已连接云端' : '🔴 未连接'}</p>
+              {cloudStatus && (
+                <p style={{padding: '8px 12px', background: 'rgba(34,197,94,0.1)', borderRadius: 6, fontSize: 13}}>
+                  {cloudStatus}
+                </p>
+              )}
               <p style={{opacity: 0.7, fontSize: 12}}>
                 · 本地数据仍是主存储，云端作为镜像备份<br/>
                 · 新建/删除对话会自动同步到云端<br/>
                 · 消息增量同步（仅添加新消息）
               </p>
-              <button 
-                onClick={async () => {
-                  try {
-                    const cloudConvs = await fetchCloudConversations()
-                    alert(`云端备份总计：${cloudConvs.length} 个对话\n\n最近 5 个：\n` + 
-                      cloudConvs.slice(0, 5).map(c => `· ${c.title} (${c.message_count || 0} 条消息)`).join('\n'))
-                  } catch (e) {
-                    alert('获取云端备份失败：' + e.message)
-                  }
-                }}
-                className="image-gen-btn"
-                style={{marginTop: 12}}
-              >
-                📦 查看云端备份列表
-              </button>
+              
+              <div style={{display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap'}}>
+                <button 
+                  disabled={cloudBusy}
+                  onClick={async () => {
+                    setCloudBusy(true)
+                    setCloudStatus('正在推送本地对话到云端...')
+                    try {
+                      const localConvs = getConversations()
+                      const result = await pushAllToCloud(localConvs)
+                      setCloudStatus(`✅ 推送完成：新增 ${result.pushed} 个对话、${result.skipped} 个已同步、${result.messagesPushed} 条消息${result.errors.length ? ` (${result.errors.length} 个错误)` : ''}`)
+                    } catch (e) {
+                      setCloudStatus('❌ ' + e.message)
+                    } finally {
+                      setCloudBusy(false)
+                    }
+                  }}
+                  className="image-gen-btn"
+                >
+                  ⬆️ 首次全量推送本地→云端
+                </button>
+                
+                <button 
+                  disabled={cloudBusy}
+                  onClick={async () => {
+                    setCloudBusy(true)
+                    setCloudStatus('正在获取云端备份...')
+                    try {
+                      const list = await fetchCloudConversations()
+                      setCloudBackups(list)
+                      setCloudStatus(`云端共 ${list.length} 个备份`)
+                    } catch (e) {
+                      setCloudStatus('❌ ' + e.message)
+                    } finally {
+                      setCloudBusy(false)
+                    }
+                  }}
+                  className="image-gen-btn"
+                >
+                  🔄 刷新备份列表
+                </button>
+              </div>
+              
+              {cloudBackups.length > 0 && (
+                <div style={{marginTop: 16, borderTop: '1px solid #333', paddingTop: 12}}>
+                  <p style={{marginBottom: 8, fontWeight: 'bold'}}>云端备份列表（点击恢复到本地）：</p>
+                  <div style={{maxHeight: 280, overflowY: 'auto'}}>
+                    {cloudBackups.map(c => (
+                      <div 
+                        key={c.id}
+                        style={{
+                          padding: '8px 12px',
+                          margin: '4px 0',
+                          background: 'rgba(255,255,255,0.05)',
+                          borderRadius: 6,
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 8
+                        }}
+                      >
+                        <div style={{flex: 1, overflow: 'hidden'}}>
+                          <div style={{fontSize: 13, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>
+                            {c.title}
+                          </div>
+                          <div style={{fontSize: 11, opacity: 0.6}}>
+                            {c.message_count || 0} 条 · ID: {c.id}
+                          </div>
+                        </div>
+                        <button
+                          disabled={cloudBusy}
+                          onClick={async () => {
+                            setCloudBusy(true)
+                            try {
+                              const localConv = await pullCloudConversation(c.id)
+                              // 保存到本地
+                              const data = JSON.parse(localStorage.getItem('freechat_data') || '{"conversations":[],"folders":[],"tags":[],"searchHistory":[]}')
+                              data.conversations.unshift(localConv)
+                              localStorage.setItem('freechat_data', JSON.stringify(data))
+                              setConversations([localConv, ...conversations])
+                              setCloudStatus(`✅ 已恢复「${localConv.title}」到本地（${localConv.messages.length} 条消息）`)
+                            } catch (e) {
+                              setCloudStatus('❌ ' + e.message)
+                            } finally {
+                              setCloudBusy(false)
+                            }
+                          }}
+                          style={{
+                            padding: '4px 10px',
+                            background: 'rgba(34,197,94,0.2)',
+                            border: '1px solid rgba(34,197,94,0.4)',
+                            borderRadius: 4,
+                            color: '#22c55e',
+                            cursor: 'pointer',
+                            fontSize: 12
+                          }}
+                        >
+                          ⬇️ 恢复
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

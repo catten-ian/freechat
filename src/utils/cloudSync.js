@@ -184,3 +184,104 @@ export function fetchCloudMessages(cloudId) {
     .then(r => r.json())
     .then(data => data.messages || [])
 }
+
+// 首次全量同步：把本地所有对话推送到云端
+export async function pushAllToCloud(localConversations) {
+  if (!isSyncEnabled() || !adapter) {
+    throw new Error('云端同步未启用')
+  }
+  
+  let pushed = 0
+  let skipped = 0
+  let messagesPushed = 0
+  const errors = []
+  
+  for (const conv of localConversations) {
+    try {
+      // 已映射过的跳过
+      if (getCloudId(conv.id)) {
+        skipped++
+        continue
+      }
+      
+      // 1. 创建云端对话（用 REST 同步，便于按序）
+      const createRes = await fetch('/api/db/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: conv.title || '未命名对话',
+          model: conv.model || 'gpt-4o'
+        })
+      })
+      const createData = await createRes.json()
+      
+      if (!createData.success) {
+        errors.push(`${conv.title}: 创建失败`)
+        continue
+      }
+      
+      const cloudId = createData.conversation.id
+      setCloudId(conv.id, cloudId)
+      pushed++
+      
+      // 2. 推送所有历史消息
+      const messages = conv.messages || []
+      for (const msg of messages) {
+        if (!msg.role || !msg.content) continue
+        
+        await fetch(`/api/db/conversations/${cloudId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role: msg.role,
+            content: typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+          })
+        })
+        messagesPushed++
+      }
+      
+      // 标记已同步的消息数
+      lastSyncedMessageCount.set(conv.id, messages.length)
+      
+      console.log(`☁️  全量推送: ${conv.title} (${messages.length} 条消息)`)
+    } catch (e) {
+      errors.push(`${conv.title}: ${e.message}`)
+    }
+  }
+  
+  return { pushed, skipped, messagesPushed, errors }
+}
+
+// 跨设备恢复：从云端拉取一个对话到本地格式
+export async function pullCloudConversation(cloudId) {
+  const [convRes, msgsRes] = await Promise.all([
+    fetch(`/api/db/conversations`).then(r => r.json()),
+    fetch(`/api/db/conversations/${cloudId}/messages`).then(r => r.json())
+  ])
+  
+  const cloudConv = (convRes.conversations || []).find(c => c.id === cloudId)
+  if (!cloudConv) throw new Error('云端对话不存在')
+  
+  // 转为本地格式（与 storage.js createConversation 一致）
+  const localId = Date.now()
+  const localConv = {
+    id: localId,
+    title: cloudConv.title,
+    model: cloudConv.model,
+    messages: (msgsRes.messages || []).map(m => ({
+      role: m.role,
+      content: m.content
+    })),
+    tags: [],
+    folderId: null,
+    archived: Boolean(cloudConv.archived),
+    createdAt: cloudConv.created_at || localId,
+    updatedAt: cloudConv.updated_at || localId
+  }
+  
+  // 建立映射，避免下次重复推送
+  setCloudId(localId, cloudId)
+  lastSyncedMessageCount.set(localId, localConv.messages.length)
+  
+  return localConv
+}

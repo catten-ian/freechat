@@ -12,6 +12,7 @@ import {
   setSyncEnabled as cloudSetSyncEnabled, 
   initSync as cloudInitSync,
   isOnline as cloudIsOnline,
+  onHealthChange as cloudOnHealthChange,
   syncCreateConversation,
   syncUpdateConversation,
   syncDeleteConversation,
@@ -132,17 +133,14 @@ export default function App() {
 
   // 初始化云端同步
   useEffect(() => {
-    if (cloudSyncEnabled) {
-      const adapter = cloudInitSync()
-      if (adapter) {
-        const updateStatus = () => setCloudOnline(cloudIsOnline())
-        adapter.on('connected', updateStatus)
-        adapter.on('disconnected', updateStatus)
-        // 初次检查
-        const timer = setInterval(updateStatus, 1500)
-        return () => clearInterval(timer)
-      }
+    if (!cloudSyncEnabled) {
+      setCloudOnline(false)
+      return
     }
+    cloudInitSync()
+    setCloudOnline(cloudIsOnline())
+    const unsubscribe = cloudOnHealthChange((ok) => setCloudOnline(ok))
+    return unsubscribe
   }, [cloudSyncEnabled])
 
   useEffect(() => {

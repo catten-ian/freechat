@@ -7,6 +7,18 @@ import "./App.css"
 import { Sidebar } from './src/components/Sidebar'
 import './src/components/Sidebar.css'
 import { getConversations, createConversation, updateConversation, deleteConversation } from './src/utils/storage'
+import { 
+  isSyncEnabled as cloudIsSyncEnabled, 
+  setSyncEnabled as cloudSetSyncEnabled, 
+  initSync as cloudInitSync,
+  isOnline as cloudIsOnline,
+  syncCreateConversation,
+  syncUpdateConversation,
+  syncDeleteConversation,
+  syncMessages as cloudSyncMessages,
+  fetchCloudConversations,
+  fetchCloudMessages
+} from './src/utils/cloudSync'
 
 const models = [
   { id: "meta-llama/llama-3.2-3b-instruct:free", name: "Llama 3.2 3B", desc: "轻量快速", api: "openrouter", vision: false, thinking: false },
@@ -109,6 +121,24 @@ export default function App() {
   })
   const [currentConversation, setCurrentConversation] = useState(null)
   const [conversations, setConversations] = useState([])
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(() => cloudIsSyncEnabled())
+  const [cloudOnline, setCloudOnline] = useState(false)
+  const [showCloudPanel, setShowCloudPanel] = useState(false)
+
+  // 初始化云端同步
+  useEffect(() => {
+    if (cloudSyncEnabled) {
+      const adapter = cloudInitSync()
+      if (adapter) {
+        const updateStatus = () => setCloudOnline(cloudIsOnline())
+        adapter.on('connected', updateStatus)
+        adapter.on('disconnected', updateStatus)
+        // 初次检查
+        const timer = setInterval(updateStatus, 1500)
+        return () => clearInterval(timer)
+      }
+    }
+  }, [cloudSyncEnabled])
 
   useEffect(() => {
     const saved = getCookie('chat_history')
@@ -138,6 +168,8 @@ export default function App() {
       // 保存到当前对话
       if (currentConversation) {
         updateConversation(currentConversation.id, { messages: toSave })
+        // 云端同步新增消息
+        cloudSyncMessages(currentConversation.id, toSave)
       }
     }
   }, [messages, currentConversation])
@@ -159,6 +191,8 @@ export default function App() {
     setCurrentConversation(conversation)
     setMessages([])
     setCookie('chat_history', [], 7)
+    // 云端同步
+    syncCreateConversation(conversation)
   }
   
   // 删除对话
@@ -169,6 +203,8 @@ export default function App() {
       setCurrentConversation(null)
       setMessages([])
     }
+    // 云端同步
+    syncDeleteConversation(id)
   }
 
   const handleImageUpload = (e) => {
@@ -525,6 +561,25 @@ export default function App() {
               />
               <span>🧠 思考模式</span>
             </label>
+            <label className="menu-item toggle-item">
+              <input 
+                type="checkbox" 
+                checked={cloudSyncEnabled} 
+                onChange={(e) => {
+                  cloudSetSyncEnabled(e.target.checked)
+                  setCloudSyncEnabled(e.target.checked)
+                  if (e.target.checked) {
+                    cloudInitSync()
+                  }
+                }}
+              />
+              <span>☁️ 云端同步 {cloudSyncEnabled && (cloudOnline ? '🟢' : '🔴')}</span>
+            </label>
+            {cloudSyncEnabled && (
+              <button onClick={() => { setShowCloudPanel(true); setShowMenu(false) }} className="menu-item">
+                💾 云端备份管理
+              </button>
+            )}
             <button onClick={() => { setShowImageGen(true); setShowMenu(false) }} className="menu-item">
               🎨 图片生成
             </button>
@@ -575,6 +630,40 @@ export default function App() {
           </div>
         )}
       </header>
+
+      {showCloudPanel && (
+        <div className="modal-overlay" onClick={() => setShowCloudPanel(false)}>
+          <div className="image-gen-panel" onClick={(e) => e.stopPropagation()} style={{maxWidth: 520}}>
+            <div className="image-gen-header">
+              <span>☁️ 云端备份管理</span>
+              <button onClick={() => setShowCloudPanel(false)} className="close-panel">×</button>
+            </div>
+            <div style={{padding: '16px', color: '#e0e0e0', fontSize: 14, lineHeight: 1.7}}>
+              <p>状态：{cloudOnline ? '🟢 已连接云端' : '🔴 未连接'}</p>
+              <p style={{opacity: 0.7, fontSize: 12}}>
+                · 本地数据仍是主存储，云端作为镜像备份<br/>
+                · 新建/删除对话会自动同步到云端<br/>
+                · 消息增量同步（仅添加新消息）
+              </p>
+              <button 
+                onClick={async () => {
+                  try {
+                    const cloudConvs = await fetchCloudConversations()
+                    alert(`云端备份总计：${cloudConvs.length} 个对话\n\n最近 5 个：\n` + 
+                      cloudConvs.slice(0, 5).map(c => `· ${c.title} (${c.message_count || 0} 条消息)`).join('\n'))
+                  } catch (e) {
+                    alert('获取云端备份失败：' + e.message)
+                  }
+                }}
+                className="image-gen-btn"
+                style={{marginTop: 12}}
+              >
+                📦 查看云端备份列表
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showImageGen && (
         <div className="modal-overlay" onClick={() => setShowImageGen(false)}>

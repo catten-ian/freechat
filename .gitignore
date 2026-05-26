@@ -5,3 +5,4 @@ dist/
 .env
 server_legacy.js
 data/*.db*
+ecosystem.config.cjs
